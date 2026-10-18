@@ -17,7 +17,7 @@ await build({
   nodePaths: [path.join(here, 'node_modules')],
 });
 
-const wasm = path.join(here, 'node_modules/@ruby/3.3-wasm-wasi/dist/ruby+stdlib.wasm');
+const wasm = path.join(here, 'node_modules/@ruby/4.0-wasm-wasi/dist/ruby+stdlib.wasm');
 const dst = path.join(root, 'web/ruby/ruby+stdlib.wasm');
 fs.mkdirSync(path.dirname(dst), { recursive: true });
 if (!fs.existsSync(dst) || fs.statSync(dst).size !== fs.statSync(wasm).size) fs.copyFileSync(wasm, dst);

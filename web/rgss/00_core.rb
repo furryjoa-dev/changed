@@ -4,6 +4,17 @@ require 'json'
 require 'zlib'
 
 $js = JS.global[:RGSS]
+$PROF = JS.global[:location][:search].to_s.include?('prof')
+if $PROF
+  require 'objspace'
+  class ProfJS
+    attr_reader :by
+    def initialize(o); @o = o; @by = Hash.new(0); end
+    def call(n, *a); @by[n] += 1; @o.call(n, *a); end
+    def [](k); @o[k]; end
+  end
+  $js = ProfJS.new($js)
+end
 $TEST = false
 $BTEST = false
 

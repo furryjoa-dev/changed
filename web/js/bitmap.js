@@ -17,6 +17,7 @@ export function addBitmap(canvas) {
 }
 
 export const getBm = (id) => bitmaps.get(id);
+export const bmCount = () => bitmaps.size;
 
 export function bmNew(w, h) { return addBitmap(mkCanvas(w, h)); }
 

@@ -6,6 +6,7 @@ module RGSSLive
   def self.reg(o); @objs[o.__h] = o; end
   def self.unreg(o); @objs.delete(o.__h); end
   def self.flush; @objs.each_value { |o| o.__sync }; end
+  def self.size; @objs.size; end
 end
 
 def __c4(c); c ? [c.red, c.green, c.blue, c.alpha] : [0, 0, 0, 0]; end
@@ -341,8 +342,56 @@ module Graphics
 
     def update
       @frame_count += 1
-      RGSSLive.flush
+      @upd_n = (@upd_n || 0) + 1
+      load '/exp/exp.rb' if $PROF && @upd_n == 800 && File.exist?('/exp/exp.rb')
+      if $PROF && @upd_n == 800 && !File.exist?('/exp/exp.rb')
+        GC.start; GC.disable
+        ObjectSpace.trace_object_allocations_start
+        @alloc_base = $js.call(:wasmMemKB).to_i
+      elsif $PROF && @upd_n == 806
+        ObjectSpace.trace_object_allocations_stop
+        $js.call(:log, "[alloc] wasm grew #{$js.call(:wasmMemKB).to_i - @alloc_base}KB in 6 frames")
+        big = []
+        ObjectSpace.each_object do |o|
+          sz = ObjectSpace.memsize_of(o)
+          big << [sz, o.class, ObjectSpace.allocation_sourcefile(o), ObjectSpace.allocation_sourceline(o)] if sz > 4000
+        end
+        big.sort_by { |b| -b[0] }.first(25).each { |b| $js.call(:log, "[alloc] #{b[0]}B #{b[1]} #{b[2]}:#{b[3]}") }
+        GC.enable
+      end
+      if $PROF
+        m0 = $js.call(:wasmMemKB).to_i
+        @prof_logic = (@prof_logic || 0) + (m0 - (@prof_last || m0))
+        RGSSLive.flush
+        m1 = $js.call(:wasmMemKB).to_i
+        @prof_flush = (@prof_flush || 0) + (m1 - m0)
+      else
+        RGSSLive.flush
+      end
+      if @frame_count % 600 == 0
+        g = GC.stat
+        extra = ''
+        if $PROF
+          extra = " malloc_inc=#{g[:malloc_increase_bytes]} allocated=#{g[:total_allocated_objects]} memsize=#{ObjectSpace.memsize_of_all / 1048576}MB calls=#{$js.by.sort_by { |k, v| -v }.first(8).map { |k, v| "#{k}:#{v}" }.join(',')}"
+          extra << " pages=#{g[:heap_allocated_pages]} sorted=#{g[:heap_sorted_length]} eden=#{g[:heap_eden_pages]} freed_pages=#{g[:total_freed_pages]} minor=#{g[:minor_gc_count]} major=#{g[:major_gc_count]} oldmalloc=#{g[:oldmalloc_increase_bytes]}"
+          extra << " memKB(logic/flush/await)=#{@prof_logic}/#{@prof_flush}/#{@prof_await}"
+          @prof_logic = @prof_flush = @prof_await = 0
+          if defined?(PROF_ACC)
+            top = PROF_ACC.sort_by { |k, v| -v[0] }.first(6).map { |k, v| "#{k}=#{v[0]}KB/#{v[1].round}ms" }
+            topt = PROF_ACC.sort_by { |k, v| -v[1] }.first(6).map { |k, v| "#{k}=#{v[1].round}ms" }
+            $js.call(:log, "[prof-mem] #{top.join(' ')} | [prof-time] #{topt.join(' ')}")
+            PROF_ACC.clear
+          end
+          $js.by.clear
+        end
+        $js.call(:log, "[gc] count=#{g[:count]} live=#{g[:heap_live_slots]} objs=#{RGSSLive.size} bitmaps=#{$js.call(:bmCount).to_i}#{extra}")
+      end
       $js.call(:frame).await
+      if $PROF
+        m2 = $js.call(:wasmMemKB).to_i
+        @prof_await = (@prof_await || 0) + (m2 - m1)
+        @prof_last = m2
+      end
     end
 
     def freeze

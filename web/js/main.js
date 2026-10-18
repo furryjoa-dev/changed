@@ -82,6 +82,7 @@ const RGSS = {
     return u ? b64(u) : '';
   },
   keyMask,
+  wasmMemKB: () => (globalThis.__wasmMem ? globalThis.__wasmMem.buffer.byteLength / 1024 : 0),
   ...Object.fromEntries(Object.entries(bm).filter(([k]) => /^bm[A-Z]/.test(k))),
   objNew: disp.objNew, objUpdate: disp.objUpdate, objDispose: disp.objDispose,
   tmSetMap: disp.tmSetMap, tmSetPass: disp.tmSetPass,
@@ -172,6 +173,7 @@ async function main() {
   vm.addToImports(imports);
   const instance = await WebAssembly.instantiate(module, imports);
   await vm.setInstance(instance);
+  globalThis.__wasmMem = instance.exports.memory;
   wasi.initialize(instance);
   mark('wasm instantiated');
   vm.initialize(['ruby.exe', '-EUTF-8', '-e_=0']);
@@ -184,6 +186,7 @@ async function main() {
   const rest = allFiles.filter((f) => !core.includes(f) && !/\.ttf$/i.test(f));
   setTimeout(() => assets.prefetch(rest, 4), 3000);
 
+  if (params.has('prof')) globalThis.__rb = (code) => vm.eval(code).toString();
   mark('starting game');
   try {
     await vm.evalAsync("Dir['/rgss/*.rb'].sort.each { |f| load f }");

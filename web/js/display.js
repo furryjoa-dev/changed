@@ -459,16 +459,29 @@ export function gSnap() {
 let nextTime = 0;
 export function frameReset() { nextTime = performance.now(); }
 
+const prof = { n: 0, ruby: 0, render: 0, wait: 0, last: 0 };
+globalThis.__prof = prof;
 export function frame() {
   frameNo++;
   globalThis.__frames = frameNo;
+  const t0 = performance.now();
+  if (prof.last) prof.ruby += t0 - prof.last;     // 직전 프레임 이후 Ruby 가 쓴 시간
   present();
+  const t1 = performance.now();
+  prof.render += t1 - t0;
   return new Promise((resolve) => {
     const step = () => {
       const now = performance.now();
       if (now + 3 >= nextTime) {
         nextTime += FRAME_MS;
         if (now - nextTime > FRAME_MS * 3) nextTime = now + FRAME_MS; // 탭 비활성/지연 후 따라잡기 방지
+        prof.wait += now - t1;
+        prof.last = now;
+        if (++prof.n % 300 === 0) {
+          const mem = globalThis.__wasmMem ? (globalThis.__wasmMem.buffer.byteLength / 1048576).toFixed(0) : '?';
+          console.log(`[prof] frames=${prof.n} ruby=${(prof.ruby / 300).toFixed(1)}ms render=${(prof.render / 300).toFixed(1)}ms wait=${(prof.wait / 300).toFixed(1)}ms wasmMem=${mem}MB`);
+          prof.ruby = prof.render = prof.wait = 0;
+        }
         resolve(1);
       } else requestAnimationFrame(step);
     };
