@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<title>Changed Special</title>
+<link rel="stylesheet" href="web/style.css">
+</head>
+<body>
+<div id="app">
+  <div id="stage"><canvas id="screen" width="544" height="416"></canvas></div>
+  <div id="touch" hidden>
+    <div id="dpad"><i></i></div>
+    <div id="btns">
+      <button data-key="B" class="b">취소</button>
+      <button data-key="C" class="c">확인</button>
+      <button data-key="A" class="a">대시</button>
+    </div>
+  </div>
+  <button id="fs" title="전체화면" aria-label="전체화면">⛶</button>
+</div>
+<div id="boot">
+  <h1>Changed Special</h1>
+  <div id="status">불러오는 중…</div>
+  <div id="barwrap"><div id="bar"></div></div>
+</div>
+<pre id="fatal" hidden></pre>
+<script src="web/dist/main.js"></script>
+<script>
+(function () {
+  var coarse = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  if (coarse) document.getElementById('touch').hidden = false;
+  document.getElementById('fs').addEventListener('click', function () {
+    var el = document.documentElement;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (el.requestFullscreen) el.requestFullscreen().then(function () { if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(function () {}); }).catch(function () {});
+  });
+})();
+</script>
+</body>
+</html>

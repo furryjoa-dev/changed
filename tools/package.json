@@ -1,0 +1,16 @@
+{
+  "name": "changed-web-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@bjorn3/browser_wasi_shim": "^0.4.1",
+    "@ruby/3.3-wasm-wasi": "^2.7.1",
+    "@ruby/wasm-wasi": "2.10.1",
+    "esbuild": "^0.25.0",
+    "playwright-core": "^1.50.0",
+    "upng-js": "^2.1.0"
+  }
+}

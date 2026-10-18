@@ -1,0 +1,32 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; overscroll-behavior: none; touch-action: none; user-select: none; -webkit-user-select: none; }
+#app { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; background: #000; }
+#stage { flex: 0 0 auto; width: min(100vw, calc((100dvh) * 544 / 416)); aspect-ratio: 544 / 416; background: #000; }
+#screen { width: 100%; height: 100%; display: block; image-rendering: auto; }
+#touch { flex: 1 1 auto; width: 100%; position: relative; min-height: 0; }
+#dpad { position: absolute; left: 4vmin; bottom: 4vmin; width: 36vmin; height: 36vmin; max-width: 200px; max-height: 200px; border-radius: 50%; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.25); touch-action: none; }
+#dpad i { position: absolute; left: 50%; top: 50%; width: 38%; height: 38%; transform: translate(-50%,-50%); border-radius: 50%; background: rgba(255,255,255,.15); }
+#btns { position: absolute; right: 4vmin; bottom: 4vmin; width: 44vmin; height: 36vmin; max-width: 240px; max-height: 200px; }
+#btns button { position: absolute; width: 38%; aspect-ratio: 1; border-radius: 50%; border: 2px solid rgba(255,255,255,.3); background: rgba(255,255,255,.14); color: #fff; font: 600 3.4vmin/1 system-ui, sans-serif; touch-action: none; padding: 0; }
+#btns button.on { background: rgba(255,255,255,.4); }
+#btns .c { right: 0; top: 18%; }
+#btns .b { right: 44%; bottom: 0; }
+#btns .a { right: 44%; top: 0; width: 30%; }
+#fs { position: fixed; top: max(8px, env(safe-area-inset-top)); right: max(8px, env(safe-area-inset-right)); width: 36px; height: 36px; border-radius: 8px; border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.45); color: #fff; font-size: 20px; line-height: 1; opacity: .55; z-index: 5; padding: 0; }
+@media (orientation: landscape) and (pointer: coarse) {
+  #app { display: block; }
+  #stage { position: absolute; left: 50%; top: 0; transform: translateX(-50%); height: 100dvh; width: auto; max-width: 100vw; }
+  #touch { position: absolute; inset: 0; pointer-events: none; }
+  #dpad, #btns { pointer-events: auto; }
+  #dpad { width: 30vh; height: 30vh; left: max(2vw, env(safe-area-inset-left)); bottom: 6vh; }
+  #btns { width: 36vh; height: 30vh; right: max(2vw, env(safe-area-inset-right)); bottom: 6vh; }
+  #btns button { font-size: 3vh; }
+}
+#boot { position: fixed; inset: 0; z-index: 10; background: #0b0b10; color: #ddd; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; font-family: system-ui, sans-serif; transition: opacity .3s; }
+#boot.hidden { opacity: 0; pointer-events: none; }
+#boot h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: .02em; }
+#status { font-size: 13px; opacity: .8; min-height: 1.3em; text-align: center; padding: 0 16px; }
+#barwrap { width: min(70vw, 360px); height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
+#bar { height: 100%; width: 0; background: #6aa9ff; transition: width .15s; }
+#fatal { position: fixed; inset: 0; z-index: 20; margin: 0; padding: 16px; background: rgba(0,0,0,.92); color: #ff9a9a; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; overflow: auto; user-select: text; -webkit-user-select: text; touch-action: auto; }
