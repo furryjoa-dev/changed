@@ -21,6 +21,7 @@ for (const s of arg('keys').split(',').filter(Boolean)) {
 events.sort((a, b) => a.t - b.t);
 const jsEvals = arg('js').split(';;').filter(Boolean).map((e) => { const i = e.lastIndexOf('@'); return { t: +e.slice(i + 1), code: e.slice(0, i) }; });
 const evals = arg('eval').split(';;').filter(Boolean).map((e) => { const i = e.lastIndexOf('@'); return { t: +e.slice(i + 1), code: e.slice(0, i) }; });
+const throttle = arg('throttle').split('@');   // 예: --throttle=4@45  (45초부터 CPU 4배 느리게)
 const shots = arg('shots').split(',').filter(Boolean).map(Number);
 const exe = fs.readdirSync('/opt/pw-browsers').filter((d) => d.startsWith('chromium-')).map((d) => `/opt/pw-browsers/${d}/chrome-linux/chrome`).find((p) => fs.existsSync(p));
 const srv = await serve(8123);
@@ -32,6 +33,7 @@ page.on('console', (m) => { const t = m.text(); if (/wasi:|willReadFrequently|40
 page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 800)));
 await page.goto('http://localhost:8123/index.html' + '?autostart&nosw' + (arg('q') ? '&' + arg('q') : ''));
 
+if (throttle[0]) { const cdp = await page.context().newCDPSession(page); setTimeout(() => cdp.send('Emulation.setCPUThrottlingRate', { rate: +throttle[0] }), +(throttle[1] || 0) * 1000); }
 const timeline = [...events.map((e) => ({ t: e.t, e })), ...shots.map((t) => ({ t, shot: t })), ...evals.map((e) => ({ t: e.t, ev: e.code })), ...jsEvals.map((e) => ({ t: e.t, js: e.code }))].sort((a, b) => a.t - b.t);
 let lastFrames = 0, lastT = 0;
 for (const it of timeline) {

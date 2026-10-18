@@ -1,24 +1,13 @@
 # RGSS2 그래픽 계층: Bitmap / Sprite / Viewport / Plane / Window / Tilemap / Graphics
 # 상태(ivar)는 Ruby 쪽에 두고, Graphics.update 때 변경분만 JS 렌더러로 보낸다.
 
-# 표시 객체 레지스트리. WeakRef 로 들고 있어서, 스크립트가 dispose 를 빼먹고 참조를 버린 스프라이트/윈도우는
-# 원본 RGSS 처럼 GC 때 사라진다 (살아있는 동안만 JS 렌더러에 동기화).
-require 'weakref'
+# 표시 객체 레지스트리. WeakMap(키가 약참조)이라서, 스크립트가 dispose 를 빼먹고 참조를 버린 스프라이트/윈도우는
+# 원본 RGSS 처럼 GC 때 사라진다 (finalizer 가 JS 쪽 객체를 해제). 살아있는 동안만 JS 렌더러에 동기화.
 module RGSSLive
-  @objs = {}
-  def self.reg(o); @objs[o.__h] = WeakRef.new(o); end
-  def self.unreg(o); @objs.delete(o.__h); end
-  def self.flush
-    dead = nil
-    @objs.each do |h, ref|
-      begin
-        ref.__getobj__.__sync
-      rescue WeakRef::RefError
-        (dead ||= []) << h
-      end
-    end
-    dead.each { |h| @objs.delete(h); $js.call(:objDispose, h) } if dead
-  end
+  @objs = ObjectSpace::WeakMap.new
+  def self.reg(o); @objs[o] = o.__h; end
+  def self.unreg(o); @objs.delete(o); end
+  def self.flush; @objs.each_key { |o| o.__sync }; end
   def self.size; @objs.size; end
 end
 
@@ -158,12 +147,21 @@ end
 # ---------------------------------------------------------------- 표시 객체 공통
 class DispBase
   attr_reader :__h
+  # 세터가 @__dirty 를 세우는 접근자를 만든다 (매 프레임 전체 상태를 비교하지 않기 위함)
+  def self.dirty_attr(*names)
+    names.each do |n|
+      class_eval("def #{n}; @#{n}; end; def #{n}=(v); @#{n} = v; @__dirty = true; end", __FILE__, __LINE__)
+    end
+  end
   def __create(kind, vp)
     @__h = $js.call(:objNew, kind, __vh(vp)).to_i
     @__last = nil
     @disposed = false
     RGSSLive.reg(self)
+    ObjectSpace.define_finalizer(self, DispBase.__fin(@__h))
   end
+  # GC 로 수거되면 JS 쪽 객체도 해제 (proc 이 self 를 캡처하지 않도록 클래스 메서드에서 생성)
+  def self.__fin(h); proc { $js.call(:objDispose, h) }; end
   def dispose
     return if @disposed
     @disposed = true
@@ -219,8 +217,8 @@ end
 
 # ---------------------------------------------------------------- Sprite
 class Sprite < DispBase
-  attr_accessor :x, :y, :z, :ox, :oy, :zoom_x, :zoom_y, :angle, :mirror, :bush_depth, :bush_opacity,
-                :blend_type, :visible, :viewport
+  dirty_attr :x, :y, :z, :ox, :oy, :zoom_x, :zoom_y, :angle, :mirror, :bush_depth, :bush_opacity,
+             :blend_type, :visible, :viewport
   attr_reader :bitmap, :src_rect, :opacity, :color, :tone
   def initialize(viewport = nil)
     @viewport = viewport
@@ -234,23 +232,35 @@ class Sprite < DispBase
     @opacity = 255; @blend_type = 0
     @color = Color.new(0, 0, 0, 0); @tone = Tone.new(0, 0, 0, 0)
     @flash_color = nil; @flash_duration = 0; @flash_total = 0
+    @__dirty = true; @__v1 = @__v2 = @__v3 = -1
     __create('sprite', viewport)
   end
   def bitmap=(b)
     @bitmap = b
     @src_rect = b ? Rect.new(0, 0, b.width, b.height) : Rect.new(0, 0, 0, 0)
+    @__dirty = true
   end
-  def src_rect=(r); @src_rect = r; end
-  def opacity=(v); @opacity = __clamp255(v); end
-  def color=(c); @color = c; end
-  def tone=(t); @tone = t; end
+  def src_rect=(r); @src_rect = r; @__dirty = true; end
+  def opacity=(v); @opacity = __clamp255(v); @__dirty = true; end
+  def color=(c); @color = c; @__dirty = true; end
+  def tone=(t); @tone = t; @__dirty = true; end
   def width; @src_rect.width; end
   def height; @src_rect.height; end
   def flash(color, duration)
     @flash_color = color ? color.dup : nil; @flash_duration = duration; @flash_total = duration
+    @__dirty = true
   end
   def update
-    @flash_duration -= 1 if @flash_duration > 0
+    if @flash_duration > 0
+      @flash_duration -= 1
+      @__dirty = true
+    end
+  end
+  def __sync
+    return unless @__dirty || @src_rect.__v != @__v1 || @color.__v != @__v2 || @tone.__v != @__v3
+    @__dirty = false
+    @__v1 = @src_rect.__v; @__v2 = @color.__v; @__v3 = @tone.__v
+    $js.call(:objUpdate, @__h, JSON.generate(__state))
   end
   def __state
     fc = [0, 0, 0, 0]; hide = 0
@@ -289,8 +299,8 @@ end
 
 # ---------------------------------------------------------------- Window
 class Window < DispBase
-  attr_accessor :windowskin, :contents, :viewport, :active, :visible, :arrows_visible, :pause,
-                :x, :y, :z, :ox, :oy, :padding, :padding_bottom
+  dirty_attr :windowskin, :contents, :viewport, :active, :visible, :arrows_visible, :pause,
+             :x, :y, :z, :ox, :oy, :padding, :padding_bottom
   attr_reader :cursor_rect, :width, :height, :opacity, :back_opacity, :contents_opacity, :openness
   def initialize(x = 0, y = 0, w = 0, h = 0)
     @viewport = nil
@@ -300,19 +310,26 @@ class Window < DispBase
     @x = x; @y = y; @width = w; @height = h; @z = 100; @ox = 0; @oy = 0
     @padding = 16; @padding_bottom = 16
     @opacity = 255; @back_opacity = 255; @contents_opacity = 255; @openness = 255
+    @__dirty = true; @__v1 = -1
     __create('window', nil)
   end
-  def width=(v); @width = v.to_i; end
-  def height=(v); @height = v.to_i; end
-  def opacity=(v); @opacity = __clamp255(v); end
-  def back_opacity=(v); @back_opacity = __clamp255(v); end
-  def contents_opacity=(v); @contents_opacity = __clamp255(v); end
-  def openness=(v); @openness = __clamp255(v); end
-  def cursor_rect=(r); @cursor_rect = r; end
-  def move(x, y, w, h); @x = x; @y = y; @width = w; @height = h; end
+  def width=(v); @width = v.to_i; @__dirty = true; end
+  def height=(v); @height = v.to_i; @__dirty = true; end
+  def opacity=(v); @opacity = __clamp255(v); @__dirty = true; end
+  def back_opacity=(v); @back_opacity = __clamp255(v); @__dirty = true; end
+  def contents_opacity=(v); @contents_opacity = __clamp255(v); @__dirty = true; end
+  def openness=(v); @openness = __clamp255(v); @__dirty = true; end
+  def cursor_rect=(r); @cursor_rect = r; @__dirty = true; end
+  def move(x, y, w, h); @x = x; @y = y; @width = w; @height = h; @__dirty = true; end
   def open?; @openness == 255; end
   def close?; @openness == 0; end
   def update; end
+  def __sync
+    return unless @__dirty || @cursor_rect.__v != @__v1
+    @__dirty = false
+    @__v1 = @cursor_rect.__v
+    $js.call(:objUpdate, @__h, JSON.generate(__state))
+  end
   def __state
     [@visible ? 1 : 0, @x, @y, @width, @height, @z, @ox, @oy, __bh(@windowskin), __bh(@contents),
      @cursor_rect.x, @cursor_rect.y, @cursor_rect.width, @cursor_rect.height,
@@ -386,7 +403,7 @@ module Graphics
       else
         RGSSLive.flush
       end
-      if @frame_count % 600 == 0
+      if $PROF && @frame_count % 600 == 0
         g = GC.stat
         extra = ''
         if $PROF

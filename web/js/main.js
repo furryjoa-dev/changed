@@ -10,6 +10,7 @@ import { audioPlay, audioStop, audioFade, unlockAudio } from './audio.js';
 const $ = (s) => document.querySelector(s);
 const enc = new TextEncoder();
 const params = new URLSearchParams(location.search);
+if (params.has('kinds')) globalThis.__profKinds = true;
 const BASE = new URL('.', document.baseURI).href;
 
 // ------------------------------------------------------------ UI 보조

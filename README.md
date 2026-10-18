@@ -63,4 +63,4 @@ node tools/test_offline.mjs out.png                                         # �
 node tools/node_harness.mjs 30000 --soak=1                                  # 렌더링 없이 Ruby 로직만 무작위 입력으로 장시간 실행
 ```
 
-URL 옵션: `?nosw`(서비스 워커 끔) `?prof`(프로파일/디버그) `?vorbisjs`(wasm Vorbis 디코더 강제) `?bmbudget=N`(비트맵 메모리 예산 MB).
+URL 옵션: `?nosw`(서비스 워커 끔) `?prof`(Ruby 프로파일/디버그 훅) `?kinds`(렌더 항목별 시간 로그) `?vorbisjs`(wasm Vorbis 디코더 강제) `?bmbudget=N`(비트맵 메모리 예산 MB).

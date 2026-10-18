@@ -94,6 +94,59 @@ function applyFx(ctx, w, h, color, tone, flash) {
   ctx.putImageData(im, 0, 0);
 }
 
+// ---- 뷰포트 색조: WebGL 셰이더로 처리 (CPU getImageData 대비 훨씬 빠름). WebGL 불가 시 CPU 경로로 폴백.
+let glState; // undefined: 미초기화, null: 사용 불가
+function initGL() {
+  if (glState !== undefined) return glState;
+  glState = null;
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false, depth: false, stencil: false });
+    if (!gl) return null;
+    const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    const prog = gl.createProgram();
+    gl.attachShader(prog, sh(gl.VERTEX_SHADER, 'attribute vec2 p; varying vec2 v; uniform vec2 uv; void main(){ v = (p * 0.5 + 0.5) * uv; gl_Position = vec4(p, 0., 1.); }'));
+    gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, 'precision mediump float; varying vec2 v; uniform sampler2D t; uniform vec3 tone; uniform float gray;' +
+      'void main(){ vec4 c = texture2D(t, v); vec3 r = c.rgb; float l = dot(r, vec3(.299, .587, .114)); r = mix(r, vec3(l), gray); r = clamp(r + tone, 0., 1.); gl_FragColor = vec4(r * c.a, c.a); }'));
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, 'p');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+    glState = { canvas, gl, uUV: gl.getUniformLocation(prog, 'uv'), uTone: gl.getUniformLocation(prog, 'tone'), uGray: gl.getUniformLocation(prog, 'gray') };
+    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); glState = null; });
+  } catch (e) { console.warn('WebGL tone unavailable, using CPU path', e); glState = null; }
+  return glState;
+}
+
+// src 캔버스의 (0,0,w,h) 영역에 색조를 적용해서 dst 의 (dx,dy)에 그린다. 성공하면 true.
+function toneGL(src, sw, sh, w, h, tone, dst, dx, dy) {
+  const g = initGL();
+  if (!g) return false;
+  const { gl, canvas } = g;
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  gl.viewport(0, 0, w, h);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+  gl.uniform2f(g.uUV, w / sw, h / sh);
+  gl.uniform3f(g.uTone, tone[0] / 255, tone[1] / 255, tone[2] / 255);
+  gl.uniform1f(g.uGray, tone[3] / 255);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  dst.drawImage(canvas, 0, 0, w, h, dx, dy, w, h);
+  return true;
+}
+
 const BLEND = ['source-over', 'lighter', 'difference'];
 
 // ------------------------------------------------------------------ 스프라이트
@@ -352,7 +405,18 @@ function itemsFor(vpId) {
   return list.sort(cmp);
 }
 
+const kindMs = {};
+globalThis.__kindMs = kindMs;
 function drawItem(ctx, it, offx, offy, vw, vh) {
+  if (globalThis.__profKinds) {
+    const t0 = performance.now();
+    drawItem0(ctx, it, offx, offy, vw, vh);
+    kindMs[it.kind] = (kindMs[it.kind] || 0) + performance.now() - t0;
+    return;
+  }
+  drawItem0(ctx, it, offx, offy, vw, vh);
+}
+function drawItem0(ctx, it, offx, offy, vw, vh) {
   switch (it.kind) {
     case 'sprite': drawSprite(ctx, it, offx, offy); break;
     case 'plane': drawPlane(ctx, it, offx, offy, vw, vh); break;
@@ -371,8 +435,10 @@ function drawViewport(ctx, v) {
     if (scratchA.width < v.w || scratchA.height < v.h) { scratchA.width = Math.max(scratchA.width, v.w); scratchA.height = Math.max(scratchA.height, v.h); }
     scratchAx.clearRect(0, 0, scratchA.width, scratchA.height);
     for (const it of items) drawItem(scratchAx, it, -v.ox, -v.oy, v.w, v.h);
-    applyFx(scratchAx, v.w, v.h, null, t, null);
-    ctx.drawImage(scratchA, 0, 0, v.w, v.h, v.x, v.y, v.w, v.h);
+    if (!toneGL(scratchA, scratchA.width, scratchA.height, v.w, v.h, t, ctx, v.x, v.y)) {
+      applyFx(scratchAx, v.w, v.h, null, t, null);
+      ctx.drawImage(scratchA, 0, 0, v.w, v.h, v.x, v.y, v.w, v.h);
+    }
   } else {
     ctx.save();
     ctx.beginPath(); ctx.rect(v.x, v.y, v.w, v.h); ctx.clip();
@@ -492,6 +558,7 @@ export function frame() {
         if (++prof.n % 300 === 0) {
           const mem = globalThis.__wasmMem ? (globalThis.__wasmMem.buffer.byteLength / 1048576).toFixed(0) : '?';
           console.log(`[prof] frames=${prof.n} ruby=${(prof.ruby / 300).toFixed(1)}ms render=${(prof.render / 300).toFixed(1)}ms wait=${(prof.wait / 300).toFixed(1)}ms wasmMem=${mem}MB bitmapMem=${bmMemMB()}MB bitmaps=${bitmaps.size}`);
+          if (globalThis.__profKinds) { console.log('[kinds] ' + Object.entries(kindMs).map(([k, v]) => `${k}=${(v / 300).toFixed(2)}ms`).join(' ')); for (const k in kindMs) kindMs[k] = 0; }
           prof.ruby = prof.render = prof.wait = 0;
         }
         resolve(1);

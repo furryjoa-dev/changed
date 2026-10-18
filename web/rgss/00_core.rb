@@ -78,11 +78,17 @@ class RGSSError < StandardError; end
 class RGSSReset < Exception; end
 
 # ---------------------------------------------------------------- Rect / Color / Tone
+# Rect/Color/Tone 은 변경될 때마다 __v 를 올린다 (표시 객체가 변경 여부를 정수 비교만으로 알 수 있게 함)
 class Rect
-  attr_accessor :x, :y, :width, :height
-  def initialize(x = 0, y = 0, w = 0, h = 0); @x = x; @y = y; @width = w; @height = h; end
-  def set(x, y, w, h); @x = x; @y = y; @width = w; @height = h; self; end
-  def empty; @x = @y = @width = @height = 0; self; end
+  attr_reader :x, :y, :width, :height
+  def initialize(x = 0, y = 0, w = 0, h = 0); @x = x; @y = y; @width = w; @height = h; @__v = 0; end
+  def __v; @__v ||= 0; end
+  def x=(v); @x = v; @__v = __v + 1; end
+  def y=(v); @y = v; @__v = __v + 1; end
+  def width=(v); @width = v; @__v = __v + 1; end
+  def height=(v); @height = v; @__v = __v + 1; end
+  def set(x, y, w, h); @x = x; @y = y; @width = w; @height = h; @__v = __v + 1; self; end
+  def empty; @x = @y = @width = @height = 0; @__v = __v + 1; self; end
   def ==(o); o.is_a?(Rect) && @x == o.x && @y == o.y && @width == o.width && @height == o.height; end
   def to_s; "(#{@x}, #{@y}, #{@width}, #{@height})"; end
   def _dump(d = 0); [@x, @y, @width, @height].pack('l4'); end
@@ -92,18 +98,20 @@ end
 class Color
   attr_reader :red, :green, :blue, :alpha
   def initialize(r = 0, g = 0, b = 0, a = 255); set(r, g, b, a); end
+  def __v; @__v ||= 0; end
   def set(r, g = nil, b = nil, a = 255)
     if r.is_a?(Color)
       @red, @green, @blue, @alpha = r.red, r.green, r.blue, r.alpha
     else
       @red = c255(r); @green = c255(g); @blue = c255(b); @alpha = c255(a)
     end
+    @__v = __v + 1
     self
   end
-  def red=(v); @red = c255(v); end
-  def green=(v); @green = c255(v); end
-  def blue=(v); @blue = c255(v); end
-  def alpha=(v); @alpha = c255(v); end
+  def red=(v); @red = c255(v); @__v = __v + 1; end
+  def green=(v); @green = c255(v); @__v = __v + 1; end
+  def blue=(v); @blue = c255(v); @__v = __v + 1; end
+  def alpha=(v); @alpha = c255(v); @__v = __v + 1; end
   def ==(o); o.is_a?(Color) && @red == o.red && @green == o.green && @blue == o.blue && @alpha == o.alpha; end
   def to_s; "(#{@red}, #{@green}, #{@blue}, #{@alpha})"; end
   def _dump(d = 0); [@red, @green, @blue, @alpha].pack('d4'); end
@@ -115,18 +123,20 @@ end
 class Tone
   attr_reader :red, :green, :blue, :gray
   def initialize(r = 0, g = 0, b = 0, gr = 0); set(r, g, b, gr); end
+  def __v; @__v ||= 0; end
   def set(r, g = nil, b = nil, gr = 0)
     if r.is_a?(Tone)
       @red, @green, @blue, @gray = r.red, r.green, r.blue, r.gray
     else
       @red = t255(r); @green = t255(g); @blue = t255(b); @gray = c255(gr)
     end
+    @__v = __v + 1
     self
   end
-  def red=(v); @red = t255(v); end
-  def green=(v); @green = t255(v); end
-  def blue=(v); @blue = t255(v); end
-  def gray=(v); @gray = c255(v); end
+  def red=(v); @red = t255(v); @__v = __v + 1; end
+  def green=(v); @green = t255(v); @__v = __v + 1; end
+  def blue=(v); @blue = t255(v); @__v = __v + 1; end
+  def gray=(v); @gray = c255(v); @__v = __v + 1; end
   def ==(o); o.is_a?(Tone) && @red == o.red && @green == o.green && @blue == o.blue && @gray == o.gray; end
   def to_s; "(#{@red}, #{@green}, #{@blue}, #{@gray})"; end
   def _dump(d = 0); [@red, @green, @blue, @gray].pack('d4'); end
