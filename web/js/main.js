@@ -1,5 +1,5 @@
 // 부팅: ruby.wasm + RGSS 호환 런타임을 올리고 게임을 시작한다.
-import { WASI, PreopenDirectory, File, Directory, OpenFile, ConsoleStdout } from '@bjorn3/browser_wasi_shim';
+import { WASI, wasi as wasiDefs, PreopenDirectory, File, Directory, OpenFile, ConsoleStdout } from '@bjorn3/browser_wasi_shim';
 import { RubyVM } from '@ruby/wasm-wasi';
 import { assets } from './assets.js';
 import * as bm from './bitmap.js';
@@ -26,6 +26,24 @@ function showFatal(msg) {
   $('#boot')?.classList.add('hidden');
 }
 
+// ------------------------------------------------------------ WASI 파일 보정
+// 셰임의 Filestat 직렬화 오프셋이 규격(atim@40, mtim@48, ctim@56)과 달라 수정 시각이 깨지고, 파일에 시각도 기록되지 않는다.
+// 게임의 '가장 최근 세이브 선택'(File#mtime)이 동작하도록 보정한다.
+wasiDefs.Filestat.prototype.write_bytes = function (view, ptr) {
+  view.setBigUint64(ptr, this.dev, true); view.setBigUint64(ptr + 8, this.ino, true); view.setUint8(ptr + 16, this.filetype);
+  view.setBigUint64(ptr + 24, this.nlink, true); view.setBigUint64(ptr + 32, this.size, true);
+  view.setBigUint64(ptr + 40, this.atim, true); view.setBigUint64(ptr + 48, this.mtim, true); view.setBigUint64(ptr + 56, this.ctim, true);
+};
+{
+  const origStat = File.prototype.stat;
+  File.prototype.stat = function () { const s = origStat.call(this); const t = this.mtime || 0n; s.atim = s.mtim = s.ctim = t; return s; };
+  Object.defineProperty(File.prototype, 'data', {
+    get() { return this._data; },
+    set(v) { this._data = v; this.mtime = BigInt(Date.now()) * 1000000n; },
+    configurable: true,
+  });
+}
+
 // ------------------------------------------------------------ 세이브 영속화 (IndexedDB)
 const DB = 'changed-web-saves';
 function idb() {
@@ -48,14 +66,18 @@ const idbDel = (db, k) => new Promise((res, rej) => { const t = db.transaction('
 async function setupSaves(savesDir) {
   let db = null;
   try { db = await idb(); } catch (e) { console.warn('IndexedDB unavailable: saves are session-only', e); return; }
-  for (const [k, v] of await idbAll(db)) savesDir.contents.set(k, new File(v));
+  for (const [k, v] of await idbAll(db)) {
+    const f = new File(v instanceof Uint8Array ? v : v.d);
+    if (v && v.m) f.mtime = BigInt(v.m) * 1000000n;
+    savesDir.contents.set(k, f);
+  }
   const seen = new Map(); // 이름 -> [data 참조, 길이]
   for (const [k, f] of savesDir.contents) seen.set(k, [f.data, f.data.length]);
   setInterval(() => {
     for (const [name, f] of savesDir.contents) {
       const s = seen.get(name);
       if (!(f instanceof File)) continue;
-      if (!s || s[0] !== f.data || s[1] !== f.data.length) { seen.set(name, [f.data, f.data.length]); idbPut(db, name, f.data.slice()).catch(console.error); }
+      if (!s || s[0] !== f.data || s[1] !== f.data.length) { seen.set(name, [f.data, f.data.length]); idbPut(db, name, { d: f.data.slice(), m: Number((f.mtime || 0n) / 1000000n) }).catch(console.error); }
     }
     for (const name of [...seen.keys()]) if (!savesDir.contents.has(name)) { seen.delete(name); idbDel(db, name).catch(console.error); }
   }, 1000);

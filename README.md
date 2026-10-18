@@ -50,7 +50,7 @@ tools/                     빌드·테스트 도구
 ```sh
 cd tools && npm install        # 최초 1회
 node tools/build.mjs           # 번들 + wasm 복사 + RPG 클래스/매니페스트 재생성
-node tools/convert_audio.sh    # wav → ogg (tools/convert_audio.sh, ffmpeg 필요)
+sh tools/convert_audio.sh      # BGM/ME wav → ogg (ffmpeg 필요)
 ```
 
 테스트 도구 (헤드리스 Chromium, `playwright-core`):
