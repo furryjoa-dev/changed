@@ -10,6 +10,10 @@ import { RubyVM } from '@ruby/wasm-wasi';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const FRAMES = +(process.argv[2] || 3000);
 const PROF = process.argv.includes('--prof');
+const SOAK = (process.argv.find((a) => a.startsWith('--soak=')) || '').slice(7);   // 무작위 입력 시드
+let rng = (+SOAK || 1) >>> 0;
+const rand = () => ((rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0) / 4294967296);
+let curMask = 0, maskUntil = 0;
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'web/manifest.json'), 'utf8'));
 const norm = (s) => s.replace(/\\/g, '/').normalize('NFC').toLowerCase();
 const resolve = (p, exts = ['']) => { for (const e of exts) { const r = manifest.files[norm(p) + e]; if (r) return r; } return null; };
@@ -21,7 +25,19 @@ const startT = Date.now();
 globalThis.RGSS = {
   log: (s) => console.log(s), fatal: (s) => { console.log('FATAL', s); process.exit(1); }, gameEnded: () => { console.log('game ended'); process.exit(0); },
   readB64: (p) => { const r = resolve(p); return r ? fs.readFileSync(path.join(root, r)).toString('base64') : ''; },
-  keyMask: () => (frames > 120 && frames % 40 < 3) ? 2 ** 13 : 0,   // 주기적으로 C(확인) 입력
+  keyMask: () => {
+    if (!SOAK) return (frames > 120 && frames % 40 < 3) ? 2 ** 13 : 0;   // 주기적으로 C(확인) 입력
+    if (frames > maskUntil) {   // 무작위 방향 + 가끔 버튼
+      const dirs = [0, 2, 4, 6, 8]; let m = 0;
+      const d = dirs[Math.floor(rand() * dirs.length)]; if (d) m += 2 ** d;
+      if (rand() < 0.35) m += 2 ** 13;          // C
+      if (!process.env.SOAK_NOB && rand() < 0.08) m += 2 ** 12;          // B
+      if (rand() < 0.15) m += 2 ** 11;          // A(대시)
+      if (rand() < 0.05) m += 2 ** 22;          // CTRL(스킵)
+      curMask = m; maskUntil = frames + 5 + Math.floor(rand() * 40);
+    }
+    return curMask;
+  },
   wasmMemKB: () => mem.buffer.byteLength / 1024,
   bmNew: (w, h) => addBm(w, h),
   bmLoad: (p) => {
@@ -36,7 +52,7 @@ globalThis.RGSS = {
   frameReset() {}, audioPlay() {}, audioStop() {}, audioFade() {},
   frame: () => {
     frames++;
-    if (frames % 600 === 0) console.log(`[node] frames=${frames} mem=${(mem.buffer.byteLength / 1048576).toFixed(0)}MB t=${((Date.now() - startT) / 1000).toFixed(1)}s`);
+    if (frames % 5000 === 0) console.log(`[node] frames=${frames} mem=${(mem.buffer.byteLength / 1048576).toFixed(0)}MB t=${((Date.now() - startT) / 1000).toFixed(1)}s`);
     if (frames >= FRAMES) { console.log('done'); process.exit(0); }
     return Promise.resolve(1);
   },
