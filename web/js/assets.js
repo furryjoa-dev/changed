@@ -37,16 +37,21 @@ export const assets = {
   bytesSync(rel) {
     const hit = this.cache.get(rel);
     if (hit) return hit;
-    const x = new XMLHttpRequest();
-    x.open('GET', this.url(rel), false);
-    x.overrideMimeType('text/plain; charset=x-user-defined');
-    x.send(null);
-    if (x.status !== 200 && x.status !== 0) return null;
-    const s = x.responseText;
-    const u = new Uint8Array(s.length);
-    for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i) & 255;
-    this.cache.set(rel, u);
-    return u;
+    try {
+      const x = new XMLHttpRequest();
+      x.open('GET', this.url(rel), false);
+      x.overrideMimeType('text/plain; charset=x-user-defined');
+      x.send(null);
+      if (x.status !== 200 && x.status !== 0) return null;
+      const s = x.responseText;
+      const u = new Uint8Array(s.length);
+      for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i) & 255;
+      this.cache.set(rel, u);
+      return u;
+    } catch (e) {
+      console.warn('sync load failed:', rel, e && e.message);   // 오프라인 등: 호출한 쪽이 ENOENT 로 처리
+      return null;
+    }
   },
 
   async fetchBytes(rel) {
@@ -59,12 +64,16 @@ export const assets = {
     return u;
   },
 
-  async prefetch(list, concurrency = 6, onProgress = () => {}) {
+  // keep=false 면 응답을 버리고 HTTP/서비스워커 캐시만 데운다 (JS 메모리를 쓰지 않음)
+  async prefetch(list, concurrency = 6, onProgress = () => {}, keep = true) {
     let i = 0, done = 0;
     const worker = async () => {
       while (i < list.length) {
         const rel = list[i++];
-        try { await this.fetchBytes(rel); } catch (e) { /* 개별 실패는 무시: 필요할 때 동기 로딩 */ }
+        try {
+          if (keep) await this.fetchBytes(rel);
+          else await (await fetch(this.url(rel))).arrayBuffer();
+        } catch (e) { /* 개별 실패는 무시: 필요할 때 동기 로딩 */ }
         onProgress(++done, list.length);
       }
     };

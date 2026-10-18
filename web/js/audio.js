@@ -1,4 +1,5 @@
 // Web Audio 기반 BGM/BGS/ME/SE. 디코딩은 비동기이므로 재생 요청은 토큰으로 최신 요청만 유효하게 한다.
+import { OggVorbisDecoder } from '@wasm-audio-decoders/ogg-vorbis';
 import { assets } from './assets.js';
 
 let ctx = null;
@@ -11,6 +12,11 @@ const ch = {
 };
 let meActive = false;
 
+document.addEventListener('visibilitychange', () => {
+  if (!ctx) return;
+  if (document.hidden) ctx.suspend(); else ctx.resume();
+});
+
 export function unlockAudio() {
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -20,11 +26,31 @@ export function unlockAudio() {
   if (ctx.state === 'suspended') ctx.resume();
 }
 
+// 일부 브라우저(구형 Safari 등)는 decodeAudioData 로 Ogg Vorbis 를 못 푼다 -> wasm 디코더로 대체
+let vorbis = null;
+const FORCE_JS_VORBIS = new URLSearchParams(location.search).has('vorbisjs');
+async function decodeVorbis(bytes) {
+  if (!vorbis) { vorbis = new OggVorbisDecoder(); await vorbis.ready; }
+  const { channelData, samplesDecoded, sampleRate } = await vorbis.decodeFile(bytes);
+  await vorbis.reset();
+  const buf = ctx.createBuffer(channelData.length, samplesDecoded, sampleRate);
+  channelData.forEach((ch, i) => buf.copyToChannel(ch, i));
+  return buf;
+}
+
 async function decode(url) {
   if (cache.has(url)) { const b = cache.get(url); cache.delete(url); cache.set(url, b); return b; }
   const bytes = await assets.fetchBytes(url);
-  const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  const buf = await ctx.decodeAudioData(copy);
+  let buf;
+  if (FORCE_JS_VORBIS && /\.ogg$/i.test(url)) buf = await decodeVorbis(bytes);
+  else {
+    try {
+      buf = await ctx.decodeAudioData(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+    } catch (e) {
+      if (!/\.ogg$/i.test(url)) throw e;
+      buf = await decodeVorbis(bytes);
+    }
+  }
   cache.set(url, buf);
   let total = 0;
   for (const b of cache.values()) total += b.duration;

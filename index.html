@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#000000">
 <title>Changed Special</title>
+<link rel="manifest" href="web/app.webmanifest">
+<link rel="icon" href="web/icons/icon-192.png">
+<link rel="apple-touch-icon" href="web/icons/icon-192.png">
 <link rel="stylesheet" href="web/style.css">
 </head>
 <body>
@@ -36,6 +39,7 @@
 <script src="web/dist/main.js"></script>
 <script>
 (function () {
+  if ('serviceWorker' in navigator && !/[?&]nosw\b/.test(location.search)) navigator.serviceWorker.register('sw.js').catch(function () {});
   var coarse = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   if (coarse) document.getElementById('touch').hidden = false;
   document.getElementById('fs').addEventListener('click', function () {

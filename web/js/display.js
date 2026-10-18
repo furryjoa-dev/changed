@@ -365,16 +365,27 @@ function drawViewport(ctx, v) {
   if (!v.vis || v.w <= 0 || v.h <= 0) return;
   if (v.fhide) return;
   const items = itemsFor(v.id);
-  if (fxActive(v.color, v.tone, v.flash)) {
+  const t = v.tone;
+  if (t && (t[0] || t[1] || t[2] || t[3])) {
+    // 색조는 뷰포트 안의 내용물에만 적용
     if (scratchA.width < v.w || scratchA.height < v.h) { scratchA.width = Math.max(scratchA.width, v.w); scratchA.height = Math.max(scratchA.height, v.h); }
     scratchAx.clearRect(0, 0, scratchA.width, scratchA.height);
     for (const it of items) drawItem(scratchAx, it, -v.ox, -v.oy, v.w, v.h);
-    applyFx(scratchAx, v.w, v.h, v.color, v.tone, v.flash);
+    applyFx(scratchAx, v.w, v.h, null, t, null);
     ctx.drawImage(scratchA, 0, 0, v.w, v.h, v.x, v.y, v.w, v.h);
   } else {
     ctx.save();
     ctx.beginPath(); ctx.rect(v.x, v.y, v.w, v.h); ctx.clip();
     for (const it of items) drawItem(ctx, it, v.x - v.ox, v.y - v.oy, v.w, v.h);
+    ctx.restore();
+  }
+  // color / flash 는 내용물이 없어도 뷰포트 영역 전체를 덮는 오버레이 (화면 플래시/페이드에 쓰임)
+  for (const c of [v.color, v.flash]) {
+    if (!c || c[3] <= 0) continue;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, c[3] / 255);
+    ctx.fillStyle = `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+    ctx.fillRect(v.x, v.y, v.w, v.h);
     ctx.restore();
   }
 }

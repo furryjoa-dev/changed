@@ -30,7 +30,7 @@ const T0 = Date.now();
 const now = () => (Date.now() - T0) / 1000;
 page.on('console', (m) => { const t = m.text(); if (/wasi:|willReadFrequently|404/.test(t)) return; console.log(`[${now().toFixed(1)}s]`, t.slice(0, 700)); });
 page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 800)));
-await page.goto('http://localhost:8123/index.html' + '?autostart' + (arg('q') ? '&' + arg('q') : ''));
+await page.goto('http://localhost:8123/index.html' + '?autostart&nosw' + (arg('q') ? '&' + arg('q') : ''));
 
 const timeline = [...events.map((e) => ({ t: e.t, e })), ...shots.map((t) => ({ t, shot: t })), ...evals.map((e) => ({ t: e.t, ev: e.code })), ...jsEvals.map((e) => ({ t: e.t, js: e.code }))].sort((a, b) => a.t - b.t);
 let lastFrames = 0, lastT = 0;

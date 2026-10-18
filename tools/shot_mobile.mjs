@@ -15,7 +15,7 @@ const cdp = await ctx.newCDPSession(page);
 const T0 = Date.now(); const now = () => (Date.now() - T0) / 1000;
 page.on('console', (m) => { const t = m.text(); if (/wasi:|willReadFrequently|\[prof\]|\[gc\]/.test(t)) return; console.log(`[${now().toFixed(1)}s]`, t.slice(0, 300)); });
 page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 500)));
-await page.goto(`http://localhost:${process.env.PORT || 8124}/index.html?autostart`);
+await page.goto(`http://localhost:${process.env.PORT || 8124}/index.html?autostart&nosw`);
 
 const events = [];
 for (const s of arg('touch').split(',').filter(Boolean)) {

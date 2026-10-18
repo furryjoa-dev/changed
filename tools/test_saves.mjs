@@ -8,7 +8,7 @@ const browser = await chromium.launch({ executablePath: exe, args: ['--no-sandbo
 const ctx = await browser.newContext();
 const page = await ctx.newPage();
 page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 300)));
-const url = 'http://localhost:8125/index.html?autostart&prof';
+const url = 'http://localhost:8125/index.html?autostart&nosw&prof';
 const ready = async () => { await page.waitForFunction(() => typeof globalThis.__rb === 'function' && globalThis.__frames > 30, null, { timeout: 120000 }); };
 await page.goto(url); await ready();
 console.log('write:', await page.evaluate(() => __rb(`

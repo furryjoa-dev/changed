@@ -12,5 +12,8 @@
     "esbuild": "^0.25.0",
     "playwright-core": "^1.50.0",
     "upng-js": "^2.1.0"
+  },
+  "dependencies": {
+    "@wasm-audio-decoders/ogg-vorbis": "^0.1.20"
   }
 }

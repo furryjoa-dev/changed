@@ -154,7 +154,7 @@ async function main() {
   // 핵심 데이터 선로딩 후 나머지는 백그라운드에서
   setStatus('게임 데이터 불러오는 중…', 0);
   const allFiles = Object.values(assets.files);
-  const core = allFiles.filter((f) => /^Data\/(System|Scripts)\./.test(f) || /^Graphics\/System\//.test(f));
+  const core = allFiles.filter((f) => /^Data\//.test(f) || /^Graphics\/System\//.test(f));
   await assets.prefetch(core, 6, (d, t) => setStatus(`게임 데이터 ${d}/${t}`, d / t));
 
   mark('core data prefetched');
@@ -176,7 +176,7 @@ async function main() {
   globalThis.__wasmMem = instance.exports.memory;
   wasi.initialize(instance);
   mark('wasm instantiated');
-  vm.initialize(['ruby.exe', '-EUTF-8', '-e_=0']);
+  vm.initialize(['ruby.exe', '--disable-gems', '-EUTF-8', '-e_=0']);
   mark('ruby initialized');
 
   setStatus('준비 완료', 1);
@@ -185,7 +185,13 @@ async function main() {
     const start = $('#start'), btn = $('#startBtn');
     start.hidden = false;
     $('#boot')?.classList.add('hidden');
-    const go = () => { removeEventListener('keydown', onKey); start.hidden = true; unlockAudio(); resolve(); };
+    const go = () => {
+      removeEventListener('keydown', onKey); start.hidden = true; unlockAudio();
+      if (matchMedia('(pointer: coarse)').matches && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(() => {});
+      }
+      resolve();
+    };
     const onKey = (e) => { if (e.code === 'Enter' || e.code === 'Space') go(); };
     btn.addEventListener('click', go, { once: true });
     addEventListener('keydown', onKey);
@@ -194,7 +200,8 @@ async function main() {
 
   // 나머지 에셋은 게임이 도는 동안 백그라운드로 내려받는다
   const rest = allFiles.filter((f) => !core.includes(f) && !/\.ttf$/i.test(f));
-  setTimeout(() => assets.prefetch(rest, 4), 3000);
+  const warm = Object.values(assets.audio).filter((u, i, a) => a.indexOf(u) === i);
+  setTimeout(() => assets.prefetch(rest.concat(warm), 3, undefined, false), 3000);
 
   if (params.has('prof')) globalThis.__rb = (code) => vm.eval(code).toString();
   mark('starting game');
