@@ -179,8 +179,18 @@ async function main() {
   vm.initialize(['ruby.exe', '-EUTF-8', '-e_=0']);
   mark('ruby initialized');
 
-  setStatus('시작하는 중…', 1);
-  $('#boot')?.classList.add('hidden');
+  setStatus('준비 완료', 1);
+  // 브라우저는 사용자 입력 전에는 소리를 낼 수 없으므로 시작 화면에서 입력을 한 번 받는다
+  await new Promise((resolve) => {
+    const start = $('#start'), btn = $('#startBtn');
+    start.hidden = false;
+    $('#boot')?.classList.add('hidden');
+    const go = () => { removeEventListener('keydown', onKey); start.hidden = true; unlockAudio(); resolve(); };
+    const onKey = (e) => { if (e.code === 'Enter' || e.code === 'Space') go(); };
+    btn.addEventListener('click', go, { once: true });
+    addEventListener('keydown', onKey);
+    if (params.has('autostart')) go();
+  });
 
   // 나머지 에셋은 게임이 도는 동안 백그라운드로 내려받는다
   const rest = allFiles.filter((f) => !core.includes(f) && !/\.ttf$/i.test(f));

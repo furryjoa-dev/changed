@@ -1,5 +1,5 @@
 // RGSS2 표시 객체 렌더러 (Canvas 2D)
-import { bitmaps, addBitmap, getBm } from './bitmap.js';
+import { bitmaps, addBitmap, getBm, bmMemMB, bmTick } from './bitmap.js';
 
 export const W = 544, H = 416;
 const FRAME_MS = 1000 / 60;
@@ -463,6 +463,7 @@ const prof = { n: 0, ruby: 0, render: 0, wait: 0, last: 0 };
 globalThis.__prof = prof;
 export function frame() {
   frameNo++;
+  bmTick(frameNo);
   globalThis.__frames = frameNo;
   const t0 = performance.now();
   if (prof.last) prof.ruby += t0 - prof.last;     // 직전 프레임 이후 Ruby 가 쓴 시간
@@ -479,7 +480,7 @@ export function frame() {
         prof.last = now;
         if (++prof.n % 300 === 0) {
           const mem = globalThis.__wasmMem ? (globalThis.__wasmMem.buffer.byteLength / 1048576).toFixed(0) : '?';
-          console.log(`[prof] frames=${prof.n} ruby=${(prof.ruby / 300).toFixed(1)}ms render=${(prof.render / 300).toFixed(1)}ms wait=${(prof.wait / 300).toFixed(1)}ms wasmMem=${mem}MB`);
+          console.log(`[prof] frames=${prof.n} ruby=${(prof.ruby / 300).toFixed(1)}ms render=${(prof.render / 300).toFixed(1)}ms wait=${(prof.wait / 300).toFixed(1)}ms wasmMem=${mem}MB bitmapMem=${bmMemMB()}MB bitmaps=${bitmaps.size}`);
           prof.ruby = prof.render = prof.wait = 0;
         }
         resolve(1);

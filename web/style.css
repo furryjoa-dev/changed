@@ -30,3 +30,9 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; oversc
 #barwrap { width: min(70vw, 360px); height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
 #bar { height: 100%; width: 0; background: #6aa9ff; transition: width .15s; }
 #fatal { position: fixed; inset: 0; z-index: 20; margin: 0; padding: 16px; background: rgba(0,0,0,.92); color: #ff9a9a; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; overflow: auto; user-select: text; -webkit-user-select: text; touch-action: auto; }
+#start { position: fixed; inset: 0; z-index: 9; background: #0b0b10; color: #ddd; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; font-family: system-ui, sans-serif; text-align: center; padding: 0 20px; }
+#start[hidden] { display: none; }
+#start h1 { font-size: 22px; font-weight: 600; margin: 0; }
+#start p { font-size: 12px; line-height: 1.7; opacity: .65; margin: 0; }
+#startBtn { font: 600 18px system-ui, sans-serif; color: #fff; background: #2f6fd6; border: 0; border-radius: 10px; padding: 14px 44px; touch-action: manipulation; }
+#startBtn:active { background: #2559ad; }

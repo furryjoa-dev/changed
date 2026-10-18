@@ -75,6 +75,7 @@ export async function audioPlay(kind, name, volume, pitch) {
     if (tok !== c.token) return;
     const loop = kind !== 'me';
     const { src, gain } = startSource(buf, loop, (kind === 'bgm' && meActive) ? 0 : c.vol, c.pitch);
+    if (kind !== 'se') console.log(`[audio] ${kind} ${name} ${buf.duration.toFixed(1)}s`);
     c.src = src; c.gain = gain;
     if (kind === 'me') {
       meActive = true;

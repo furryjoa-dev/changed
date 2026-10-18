@@ -1,11 +1,24 @@
 # RGSS2 그래픽 계층: Bitmap / Sprite / Viewport / Plane / Window / Tilemap / Graphics
 # 상태(ivar)는 Ruby 쪽에 두고, Graphics.update 때 변경분만 JS 렌더러로 보낸다.
 
+# 표시 객체 레지스트리. WeakRef 로 들고 있어서, 스크립트가 dispose 를 빼먹고 참조를 버린 스프라이트/윈도우는
+# 원본 RGSS 처럼 GC 때 사라진다 (살아있는 동안만 JS 렌더러에 동기화).
+require 'weakref'
 module RGSSLive
   @objs = {}
-  def self.reg(o); @objs[o.__h] = o; end
+  def self.reg(o); @objs[o.__h] = WeakRef.new(o); end
   def self.unreg(o); @objs.delete(o.__h); end
-  def self.flush; @objs.each_value { |o| o.__sync }; end
+  def self.flush
+    dead = nil
+    @objs.each do |h, ref|
+      begin
+        ref.__getobj__.__sync
+      rescue WeakRef::RefError
+        (dead ||= []) << h
+      end
+    end
+    dead.each { |h| @objs.delete(h); $js.call(:objDispose, h) } if dead
+  end
   def self.size; @objs.size; end
 end
 
@@ -29,7 +42,11 @@ class Bitmap
     end
     @width = $js.call(:bmW, @__h).to_i
     @height = $js.call(:bmH, @__h).to_i
+    ObjectSpace.define_finalizer(self, Bitmap.__fin(@__h))
   end
+
+  # GC 로 수거되면 JS 쪽 캔버스도 해제 (proc 이 self 를 캡처하지 않도록 클래스 메서드에서 생성)
+  def self.__fin(h); proc { $js.call(:bmDispose, h) }; end
 
   def self.__from_handle(h)
     o = allocate
@@ -38,6 +55,7 @@ class Bitmap
     o.instance_variable_set(:@__h, h)
     o.instance_variable_set(:@width, $js.call(:bmW, h).to_i)
     o.instance_variable_set(:@height, $js.call(:bmH, h).to_i)
+    ObjectSpace.define_finalizer(o, Bitmap.__fin(h))
     o
   end
 
